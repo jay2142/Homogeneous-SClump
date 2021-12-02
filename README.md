@@ -1,0 +1,1 @@
+To run test_yelp_b.py, you will need to download the Yelp Academic Dataset on Businesses (https://www.yelp.com/dataset/download). Presently I am running the code with "python3 test_yelp_b.py". I plan to refactor this into a real package later. 
