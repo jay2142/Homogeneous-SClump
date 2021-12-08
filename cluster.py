@@ -9,9 +9,12 @@ from tqdm import tqdm
 import os 
 
 a = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-a.add_argument("--het-source", help="source of heterogeneity", choices=["degree", "clustering"])
-a.add_argument("--data", help="name of dataset directory")
-a.add_argument("--num_clusterings", help="number of pre-clusterings to average")
+a.add_argument("--data", help="name of dataset directory",
+               required=True)
+a.add_argument("--het-source", help="source of heterogeneity", 
+               choices=["degree", "clustering"], default="clustering")
+a.add_argument("--num-clusterings", help="number of pre-clusterings to average", 
+               type=int, default=2)
 args = a.parse_args()
 
 # load edges and target clusters
@@ -48,31 +51,36 @@ if args.het_source == "degree":
     group = np.asarray(group)
 
 elif args.het_source == "clustering":
-    # cluster
-    print("\tclustering...")
-    clustering = SpectralClustering(n_clusters=k, affinity='precomputed')
-    clustering.fit(A)
+    clustering_labels = []
+    for i in tqdm(range(args.num_clusterings)):
+        # cluster
+        clustering = SpectralClustering(n_clusters=k, affinity='precomputed', random_state=i)
+        clustering.fit(A)
 
-    print("\trecomputing adjacency matrix...")
-    # make groups alphebetic to prevent clash with integer valued nodes
-    group = np.asarray([chr(x+65) for x in clustering.labels_.tolist()])
+        # make cluster nodes alphebetic to prevent clash with integer valued nodes
+        cluter_assignments = np.asarray([str(i)+chr(x+65) for x in clustering.labels_.tolist()])
 
-    # add a new node for each cluster
-    for cluster in np.unique(group):
-        G.add_node(cluster)
+        # add a new node for each cluster
+        for cluster in np.unique(cluter_assignments):
+            G.add_node(cluster)
 
-    # connect new nodes to their associated clusters
-    for node in G.nodes:
-        if isinstance(node, int):
-            G.add_edge(node, group[node])
+        # connect new nodes to their associated clusters
+        for node in G.nodes:
+            if isinstance(node, int):
+                G.add_edge(node, cluter_assignments[node])
+                
+        # save clustering labels for rand score later
+        clustering_labels.append(clustering.labels_)
+
+    # check that clusterings are unique...
+    print("rand score between preclusterings:", rand_score(clustering_labels[0], clustering_labels[1]))
 
     # recompute adjacency matrix
     A = nx.adjacency_matrix(G).toarray()
 
-    # redo group array such that all original nodes are one group, 
-    # and all new nodes are their own group
-    original_node_type = chr(np.unique(group).shape[0]+65)
-    group = np.concatenate((np.full(n_nodes, original_node_type), np.unique(group)))
+    # group 
+    group = np.full(n_nodes, 'A')
+    group = np.concatenate(([group] + [np.full(k, chr(i+66)) for i in range(args.num_clusterings)]))
 
 # create type lists
 print("creating type lists...")
@@ -81,12 +89,12 @@ for type in np.unique(group):
     type_lists[type] = np.where(group==type)[0].tolist()
 
 # create incidence matrices
-print("creating incidence matrices...")
+print("constructing incidence matrices...")
 if args.het_source == "degree": 
     # TODO: de-hardcode or make args
     links = ['AB']
 elif args.het_source == "clustering":
-    links = [original_node_type + cluster for cluster in np.unique(group)]
+    links = ['A'+cluster for cluster in np.unique(group)]
 
 incidence_matrices = {}
 for link in links:
@@ -103,7 +111,7 @@ if args.het_source == "degree":
     clustered_type = 'B'
     metapaths = ['BAB']
 elif args.het_source == "clustering":
-    metapaths = [original_node_type + cluster + original_node_type for cluster in np.unique(group)]
+    metapaths = ['A'+cluster+'A' for cluster in np.delete(np.unique(group),0)]
 
 similarity_matrices = {}
 for metapath in tqdm(metapaths):
@@ -123,5 +131,6 @@ if args.het_source == "degree":
     print("rand score:", rand_score(labels, target_clusters[type_lists[clustered_type],1]))
     print(labels)
 elif args.het_source == "clustering": 
-    print("rand score, preclustering:", rand_score(clustering.labels_, target_clusters[:,1]))
+    print("rand scores of preclusterings:", 
+          [rand_score(clustering_labels[i], target_clusters[:,1]) for i in range(args.num_clusterings)])
     print("rand score, sclump:", rand_score(labels, target_clusters[:,1]))
