@@ -1,7 +1,7 @@
 from pysclump import PathSim
 import numpy as np
 import networkx as nx
-from sclump import *
+from pysclump import *
 import argparse
 from sklearn.cluster import SpectralClustering
 from sklearn.metrics.cluster import rand_score
