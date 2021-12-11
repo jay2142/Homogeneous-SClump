@@ -16,6 +16,8 @@ a.add_argument("--het-source", help="source of heterogeneity",
                choices=["degree", "clustering"], default="clustering")
 a.add_argument("--num-clusterings", help="number of pre-clusterings to average", 
                type=int, default=2)
+a.add_argument("--sclump-iterations", help="number of iterations to run SClump for",
+               type=int, default=3)
 args = a.parse_args()
 
 # load edges and target clusters
@@ -146,12 +148,13 @@ print("running SClump...")
 # labels, learned_similarity_matrix, metapath_weights = sclump.run(verbose=True)
 # Run limited iterations:
 
-similarity_matrix, metapath_weights = sclump.optimize(num_iterations=3, verbose=True)
+similarity_matrix, metapath_weights = sclump.optimize(num_iterations=args.sclump_iterations, verbose=True)
+metapath_weights = np.round(metapath_weights, 3)
 labels = sclump.cluster(similarity_matrix)
 metapath_weights_dict = {metapath: metapath_weights[index] for metapath, index in sclump.metapath_index.items()}
 
 # print results
-print("metapath weights:", metapath_weights)
+print("metapath weights:", metapath_weights_dict)
 if args.het_source == "degree":
     print("rand score:", np.round(rand_score(labels, target_clusters[type_lists[clustered_type],1]), 3))
     print(labels)
