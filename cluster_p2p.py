@@ -7,7 +7,7 @@ from sklearn.cluster import SpectralClustering
 from sklearn.metrics.cluster import rand_score
 from tqdm import tqdm
 import csv
-import os 
+import os
 
 a = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 a.add_argument("--data", help="name of dataset directory",
@@ -37,12 +37,12 @@ adjacency = np.maximum(adjacency, adjacency.T)
 print(adjacency)
 # construct graph
 G = nx.convert_matrix.from_numpy_matrix(adjacency)
-k = 20
+k = [15,17,20]
 
 clustering_labels = []
-for i in tqdm(range(args.num_clusterings)):
+for i in range(args.num_clusterings):
     # cluster
-    clustering = SpectralClustering(n_clusters=k, affinity='precomputed', random_state=i)
+    clustering = SpectralClustering(n_clusters=k[i], affinity='precomputed', random_state=i)
     clustering.fit(adjacency)
 
     # make cluster nodes alphebetic to prevent clash with integer valued nodes
@@ -69,7 +69,7 @@ A = nx.adjacency_matrix(G).toarray()
 
 # group 
 group = np.full(N_NODES, 'A')
-group = np.concatenate(([group] + [np.full(k, chr(i+66)) for i in range(args.num_clusterings)]))
+group = np.concatenate(([group] + [np.full(k[i], chr(i+66)) for i in range(args.num_clusterings)]))
 
 # create type lists
 print("creating type lists...")
@@ -109,7 +109,7 @@ for metapath in tqdm(metapaths):
 
 # Create SClump instance.
 print("creating SClump instance...")
-sclump = SClump(similarity_matrices, num_clusters=k)
+sclump = SClump(similarity_matrices, num_clusters=17)
 
 # Run the algorithm!
 print("running SClump...")

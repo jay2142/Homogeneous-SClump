@@ -143,7 +143,12 @@ sclump = SClump(similarity_matrices, num_clusters=target_k)
 
 # Run the algorithm!
 print("running SClump...")
-labels, learned_similarity_matrix, metapath_weights = sclump.run(verbose=True)
+# labels, learned_similarity_matrix, metapath_weights = sclump.run(verbose=True)
+# Run limited iterations:
+
+similarity_matrix, metapath_weights = sclump.optimize(num_iterations=3, verbose=True)
+labels = sclump.cluster(similarity_matrix)
+metapath_weights_dict = {metapath: metapath_weights[index] for metapath, index in sclump.metapath_index.items()}
 
 # print results
 print("metapath weights:", metapath_weights)
