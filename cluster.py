@@ -1,7 +1,11 @@
 from pysclump import PathSim
 import numpy as np
 import networkx as nx
+<<<<<<< HEAD
 from pysclump.sclump import *
+=======
+from pysclump import *
+>>>>>>> 1fdb3d7bf254f68cde9a2a74efab2b4ca8517b12
 import argparse
 from sklearn.cluster import SpectralClustering
 from sklearn.metrics.cluster import rand_score
