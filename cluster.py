@@ -36,6 +36,14 @@ G.add_nodes_from(range(n_nodes))
 G.add_edges_from(edges)
 A = nx.adjacency_matrix(G).toarray()
 
+# naive clustering
+print("performing naive clustering...")
+clustering = SpectralClustering(n_clusters=target_k, affinity='precomputed', 
+                                        random_state=random.randint(0,1e9))
+clustering.fit(A)
+naive_labels = clustering.labels_
+print("rand score, naive clustering:", np.round(rand_score(naive_labels, target_clusters[:,1]), 3))
+
 ## heterogenize graph
 print(f"heterogenizing by {args.het_source}...")
 
@@ -54,8 +62,10 @@ if args.het_source == "degree":
 elif args.het_source == "clustering":
     clustering_labels = []
     group = np.full(n_nodes, 'A')
+    ks = []
     for i in tqdm(range(args.num_clusterings)):
         k = (target_k//args.num_clusterings)*(i+1)
+        ks.append(k)
         
         # cluster
         clustering = SpectralClustering(n_clusters=k, affinity='precomputed', 
@@ -85,14 +95,12 @@ elif args.het_source == "clustering":
     for i in range(args.num_clusterings):
         for j in range(i+1,args.num_clusterings):
             rand_scores[i][j] = rand_score(clustering_labels[i], clustering_labels[j])
-    print("rand scores between preclusterings:\n", rand_scores)
+    print("rand scores between preclusterings:\n", np.round(rand_scores, 3))
 
     # recompute adjacency matrix
     A = nx.adjacency_matrix(G).toarray()
-
-    # group 
-    # group = np.full(n_nodes, 'A')
-    # group = np.concatenate(([group] + [np.full(k, chr(i+66)) for i in range(args.num_clusterings)]))
+    
+    print("k's:", ks)
 
 # create type lists
 print("creating type lists...")
@@ -140,9 +148,10 @@ labels, learned_similarity_matrix, metapath_weights = sclump.run(verbose=True)
 # print results
 print("metapath weights:", metapath_weights)
 if args.het_source == "degree":
-    print("rand score:", rand_score(labels, target_clusters[type_lists[clustered_type],1]))
+    print("rand score:", np.round(rand_score(labels, target_clusters[type_lists[clustered_type],1]), 3))
     print(labels)
 elif args.het_source == "clustering": 
     print("rand scores of preclusterings:", 
-          [rand_score(clustering_labels[i], target_clusters[:,1]) for i in range(args.num_clusterings)])
-    print("rand score, sclump:", rand_score(labels, target_clusters[:,1]))
+          [np.round(rand_score(clustering_labels[i], target_clusters[:,1]), 3) for i in range(args.num_clusterings)])
+    print("rand score, naive clustering:", np.round(rand_score(naive_labels, target_clusters[:,1]), 3))
+    print("rand score, sclump:", np.round(rand_score(labels, target_clusters[:,1]), 3))
