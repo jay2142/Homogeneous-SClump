@@ -7,6 +7,7 @@ from sklearn.cluster import SpectralClustering
 from sklearn.metrics.cluster import rand_score
 from tqdm import tqdm
 import os 
+import random
 
 a = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 a.add_argument("--data", help="name of dataset directory",
@@ -25,7 +26,7 @@ edges = np.loadtxt(open(edges_path, "rb"), delimiter=",", skiprows=1).astype('in
 target_path = os.path.join(path, "data", args.data, "target.csv")
 target_clusters = np.loadtxt(open(target_path, "rb"), delimiter=",", skiprows=1).astype('int')
 
-k = np.max(target_clusters[:,1]) + 1
+target_k = np.max(target_clusters[:,1]) + 1
 n_nodes = np.unique(edges).shape[0]
 
 # construct graph
@@ -52,9 +53,13 @@ if args.het_source == "degree":
 
 elif args.het_source == "clustering":
     clustering_labels = []
+    group = np.full(n_nodes, 'A')
     for i in tqdm(range(args.num_clusterings)):
+        k = (target_k//args.num_clusterings)*(i+1)
+        
         # cluster
-        clustering = SpectralClustering(n_clusters=k, affinity='precomputed', random_state=i)
+        clustering = SpectralClustering(n_clusters=k, affinity='precomputed', 
+                                        random_state=random.randint(0,1e9))
         clustering.fit(A)
 
         # make cluster nodes alphebetic to prevent clash with integer valued nodes
@@ -71,16 +76,23 @@ elif args.het_source == "clustering":
                 
         # save clustering labels for rand score later
         clustering_labels.append(clustering.labels_)
+        
+        # update group matrix
+        group = np.concatenate(([group] + [np.full(k, chr(i+66))]))
 
-    # check that clusterings are unique...
-    print("rand score between preclusterings:", rand_score(clustering_labels[0], clustering_labels[1]))
+    # check that clusterings are unique
+    rand_scores = np.zeros((args.num_clusterings, args.num_clusterings))
+    for i in range(args.num_clusterings):
+        for j in range(i+1,args.num_clusterings):
+            rand_scores[i][j] = rand_score(clustering_labels[i], clustering_labels[j])
+    print("rand scores between preclusterings:\n", rand_scores)
 
     # recompute adjacency matrix
     A = nx.adjacency_matrix(G).toarray()
 
     # group 
-    group = np.full(n_nodes, 'A')
-    group = np.concatenate(([group] + [np.full(k, chr(i+66)) for i in range(args.num_clusterings)]))
+    # group = np.full(n_nodes, 'A')
+    # group = np.concatenate(([group] + [np.full(k, chr(i+66)) for i in range(args.num_clusterings)]))
 
 # create type lists
 print("creating type lists...")
@@ -119,7 +131,7 @@ for metapath in tqdm(metapaths):
 
 # Create SClump instance.
 print("creating SClump instance...")
-sclump = SClump(similarity_matrices, num_clusters=k)
+sclump = SClump(similarity_matrices, num_clusters=target_k)
 
 # Run the algorithm!
 print("running SClump...")
