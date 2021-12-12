@@ -6,8 +6,39 @@ import argparse
 from sklearn.cluster import SpectralClustering
 from sklearn.metrics.cluster import rand_score
 from tqdm import tqdm
+import community
+import metis
 import os 
 import random
+import copy
+
+VARY_K = True
+VARY_ALGORITHM = False
+
+def run_louvain(G):
+    partition = community.best_partition(G)
+    cluster_list = []
+    i = 0
+    while i in partition.keys():
+        cluster_list.append(partition[i])
+        i+=1
+    print(len(cluster_list))
+    return cluster_list
+
+def run_metis(G):
+    _, cluster_list = metis.part_graph(G, 18)
+    print(len(cluster_list))
+    return cluster_list
+
+def run_spectral_clustering(G):
+    A = nx.adjacency_matrix(G).toarray()
+    clustering = SpectralClustering(n_clusters=k, affinity='precomputed', 
+                                        random_state=random.randint(0,1e9))
+    clustering.fit(A)
+    print(len(clustering.labels_.tolist()))
+    return clustering.labels_.tolist()
+    
+
 
 a = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 a.add_argument("--data", help="name of dataset directory",
@@ -15,7 +46,7 @@ a.add_argument("--data", help="name of dataset directory",
 a.add_argument("--het-source", help="source of heterogeneity", 
                choices=["degree", "clustering"], default="clustering")
 a.add_argument("--num-clusterings", help="number of pre-clusterings to average", 
-               type=int, default=2)
+               type=int, default=3)
 args = a.parse_args()
 
 # load edges and target clusters
@@ -34,6 +65,9 @@ print("constructing graph...")
 G = nx.Graph()
 G.add_nodes_from(range(n_nodes))
 G.add_edges_from(edges)
+
+G_augmented = copy.deepcopy(G)
+
 A = nx.adjacency_matrix(G).toarray()
 
 ## heterogenize graph
@@ -52,30 +86,36 @@ if args.het_source == "degree":
     group = np.asarray(group)
 
 elif args.het_source == "clustering":
+    clustering_methods = [run_louvain, run_metis, run_spectral_clustering]
     clustering_labels = []
     group = np.full(n_nodes, 'A')
     for i in tqdm(range(args.num_clusterings)):
-        k = (target_k//args.num_clusterings)*(i+1)
+        if VARY_K:
+            k = (target_k//args.num_clusterings)*(i+1)
+        else: 
+            k = target_k
         
-        # cluster
-        clustering = SpectralClustering(n_clusters=k, affinity='precomputed', 
-                                        random_state=random.randint(0,1e9))
-        clustering.fit(A)
+        if not VARY_ALGORITHM:
+            labels = run_spectral_clustering(G)
+        else:
+            labels = clustering_methods[i](G)
 
         # make cluster nodes alphebetic to prevent clash with integer valued nodes
-        cluter_assignments = np.asarray([str(i)+chr(x+65) for x in clustering.labels_.tolist()])
+        cluster_assignments = np.asarray([str(i)+chr(x+65) for x in labels])
+
+        print(cluster_assignments)
 
         # add a new node for each cluster
-        for cluster in np.unique(cluter_assignments):
-            G.add_node(cluster)
+        for cluster in np.unique(cluster_assignments):
+            G_augmented.add_node(cluster)
 
         # connect new nodes to their associated clusters
         for node in G.nodes:
             if isinstance(node, int):
-                G.add_edge(node, cluter_assignments[node])
+                G_augmented.add_edge(node, cluster_assignments[node])
                 
         # save clustering labels for rand score later
-        clustering_labels.append(clustering.labels_)
+        clustering_labels.append(labels)
         
         # update group matrix
         group = np.concatenate(([group] + [np.full(k, chr(i+66))]))
@@ -88,17 +128,15 @@ elif args.het_source == "clustering":
     print("rand scores between preclusterings:\n", rand_scores)
 
     # recompute adjacency matrix
-    A = nx.adjacency_matrix(G).toarray()
-
-    # group 
-    # group = np.full(n_nodes, 'A')
-    # group = np.concatenate(([group] + [np.full(k, chr(i+66)) for i in range(args.num_clusterings)]))
+    A = nx.adjacency_matrix(G_augmented).toarray()
+    print(A.shape)
 
 # create type lists
 print("creating type lists...")
 type_lists = {}
 for type in np.unique(group):
     type_lists[type] = np.where(group==type)[0].tolist()
+# print(type_lists)
 
 # create incidence matrices
 print("constructing incidence matrices...")
@@ -108,9 +146,14 @@ if args.het_source == "degree":
 elif args.het_source == "clustering":
     links = ['A'+cluster for cluster in np.unique(group)]
 
+# print(A.shape)
+
 incidence_matrices = {}
 for link in links:
+    # print(link)
+    # print(np.ix_(type_lists[link[0]], type_lists[link[1]]))
     incidence_matrices[link] = A[np.ix_(type_lists[link[0]], type_lists[link[1]])]
+    # print(incidence_matrices[link].shape)
 
 # Create PathSim instance.
 print("creating PathSim instance...")
@@ -138,7 +181,7 @@ print("running SClump...")
 # labels, learned_similarity_matrix, metapath_weights = sclump.run(verbose=True)
 # Run limited iterations:
 
-similarity_matrix, metapath_weights = sclump.optimize(num_iterations=3, verbose=True)
+similarity_matrix, metapath_weights = sclump.optimize(num_iterations=10, verbose=True)
 labels = sclump.cluster(similarity_matrix)
 metapath_weights_dict = {metapath: metapath_weights[index] for metapath, index in sclump.metapath_index.items()}
 

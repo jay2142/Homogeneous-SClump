@@ -7,7 +7,7 @@ from sklearn.cluster import SpectralClustering
 from sklearn.metrics.cluster import rand_score
 from tqdm import tqdm
 import csv
-import os
+import os 
 
 a = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 a.add_argument("--data", help="name of dataset directory",
