@@ -11,11 +11,33 @@ import metis
 import os 
 import random
 import copy
+import matplotlib.pyplot as plt
+
 
 VARY_K = True
 VARY_ALGORITHM = False
 
-def run_louvain(G):
+def save_graph(graph,file_name):
+    #initialze Figure
+    plt.figure(num=None, figsize=(20, 20), dpi=80)
+    plt.axis('off')
+    fig = plt.figure(1)
+    pos = nx.spring_layout(graph)
+    nx.draw_networkx_nodes(graph,pos)
+    nx.draw_networkx_edges(graph,pos)
+    # nx.draw_networkx_labels(graph,pos)
+
+    cut = 1.00
+    xmax = cut * max(xx for xx, yy in pos.values())
+    ymax = cut * max(yy for xx, yy in pos.values())
+    plt.xlim(-xmax, xmax)
+    plt.ylim(-ymax, ymax)
+
+    plt.savefig(file_name,bbox_inches="tight")
+    del fig
+
+
+def run_louvain(G, k):
     partition = community.best_partition(G)
     cluster_list = []
     i = 0
@@ -25,12 +47,12 @@ def run_louvain(G):
     print(len(cluster_list))
     return cluster_list
 
-def run_metis(G):
-    _, cluster_list = metis.part_graph(G, 18)
+def run_metis(G, k):
+    _, cluster_list = metis.part_graph(G, k)
     print(len(cluster_list))
     return cluster_list
 
-def run_spectral_clustering(G):
+def run_spectral_clustering(G, k):
     A = nx.adjacency_matrix(G).toarray()
     clustering = SpectralClustering(n_clusters=k, affinity='precomputed', 
                                         random_state=random.randint(0,1e9))
@@ -69,6 +91,8 @@ G = nx.Graph()
 G.add_nodes_from(range(n_nodes))
 G.add_edges_from(edges)
 
+
+
 G_augmented = copy.deepcopy(G)
 
 A = nx.adjacency_matrix(G).toarray()
@@ -80,6 +104,13 @@ clustering = SpectralClustering(n_clusters=target_k, affinity='precomputed',
 clustering.fit(A)
 naive_labels = clustering.labels_
 print("rand score, naive clustering:", np.round(rand_score(naive_labels, target_clusters[:,1]), 3))
+
+print(naive_labels)
+naive_labels_attr = {}
+for idx, naive_label in enumerate(naive_labels):
+    naive_labels_attr[idx] = naive_label
+nx.set_node_attributes(G, naive_labels_attr, "naive_spectral_clustering")
+
 
 ## heterogenize graph
 print(f"heterogenizing by {args.het_source}...")
@@ -110,9 +141,13 @@ elif args.het_source == "clustering":
             ks.append(k)
         
         if not VARY_ALGORITHM:
-            labels = run_spectral_clustering(G)
+            labels = run_spectral_clustering(G, k)
+            labels_attr = {}
+            for idx, label in enumerate(labels):
+                labels_attr[idx] = label
+            nx.set_node_attributes(G, labels_attr, "k_{k:n}_spectral_clustering".format(k=k))
         else:
-            labels = clustering_methods[i](G)
+            labels = clustering_methods[i](G, k)
 
         # make cluster nodes alphebetic to prevent clash with integer valued nodes
         cluster_assignments = np.asarray([str(i)+chr(x+65) for x in labels])
@@ -133,6 +168,7 @@ elif args.het_source == "clustering":
         
         # update group matrix
         group = np.concatenate(([group] + [np.full(k, chr(i+66))]))
+
 
     # check that clusterings are unique
     rand_scores = np.zeros((args.num_clusterings, args.num_clusterings))
@@ -193,6 +229,11 @@ print("running SClump...")
 similarity_matrix, metapath_weights = sclump.optimize(num_iterations=args.sclump_iterations, verbose=True)
 metapath_weights = np.round(metapath_weights, 3)
 labels = sclump.cluster(similarity_matrix)
+sclump_labels_attr = {}
+for idx, label in enumerate(labels):
+    sclump_labels_attr[idx] = label
+nx.set_node_attributes(G, sclump_labels_attr, "sclump_clustering")
+
 metapath_weights_dict = {metapath: metapath_weights[index] for metapath, index in sclump.metapath_index.items()}
 
 # print results
@@ -205,3 +246,5 @@ elif args.het_source == "clustering":
           [np.round(rand_score(clustering_labels[i], target_clusters[:,1]), 3) for i in range(args.num_clusterings)])
     print("rand score, naive clustering:", np.round(rand_score(naive_labels, target_clusters[:,1]), 3))
     print("rand score, sclump:", np.round(rand_score(labels, target_clusters[:,1]), 3))
+
+nx.write_graphml(G, "k_clusterings_sclump.graphml")
